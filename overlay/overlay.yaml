@@ -1,0 +1,70 @@
+# Global additions to OpenSpec's built-in `spec-driven` schema.
+# build-schema.mjs appends each `append` block to the package schema's
+# instruction for that artifact, then writes the result as a user-level
+# override at ~/.local/share/openspec/schemas/spec-driven/.
+# Never replace upstream text here; only append.
+
+artifacts:
+  proposal:
+    append: |
+      ## Operational Concerns (required)
+
+      Specs naturally describe the happy path, and anything not specced does not
+      get built. The proposal MUST include an `## Operational Concerns` section
+      (see template) that addresses every concern below, each in one of two ways:
+
+      - **Covered** - name the requirement that handles it
+        (`Requirement: <name>`). That requirement MUST appear in this change's
+        delta specs with at least one failure-path scenario.
+      - **N/A** - give a reason specific to THIS change, e.g. "N/A - pure copy
+        change, no new runtime dependency". A bare "N/A" or "not applicable" is
+        not acceptable.
+
+      Concerns:
+      1. Dependency failure - a network call, API, database, or third party is
+         down, slow, or returns malformed data.
+      2. Timeouts and retries - what is bounded, what is retried, and whether a
+         retried operation is safe to repeat (idempotency).
+      3. Bad input and limits - invalid, oversized, or unexpected input; rate or
+         size limits.
+      4. Partial failure and concurrency - an operation that stops halfway, runs
+         twice, or races another.
+      5. Data and migration - schema or data changes, backfill, compatibility
+         with existing data and with clients still on the old version.
+      6. Rollout and rollback - how it ships (flag, staged), how to revert, and
+         any step that cannot be reverted.
+      7. Observability - how someone learns it is broken in production (log,
+         metric, alert, user-visible signal).
+      8. Security and privacy - authorization, secrets, personal data.
+
+      If you cannot tell whether a concern applies, ask the user instead of
+      marking it N/A.
+
+  specs:
+    append: |
+      ## Failure-path scenarios
+
+      Every concern the proposal marks **Covered** MUST be a requirement here with
+      at least one scenario whose WHEN is the failure itself (the dependency
+      times out, the input is invalid, the operation runs twice) and whose THEN
+      is externally observable behavior: the fallback used, the error shown,
+      the retry made, the alert raised. A requirement with only happy-path
+      scenarios does not cover a concern.
+
+  design:
+    append: |
+      ## Consistency with Operational Concerns
+
+      If design.md exists, its Migration Plan and Risks MUST agree with the
+      proposal's Operational Concerns. A rollout or rollback step the proposal
+      names must appear here, and a risk listed here that maps to a concern
+      the proposal marked N/A means the proposal is wrong: fix the proposal.
+
+  tasks:
+    append: |
+      ## Failure-path tasks
+
+      For every concern the proposal marks **Covered**, include a task that
+      exercises the failure path itself (simulate the dependency failing, send
+      the invalid input, run the operation twice) and states how to verify the
+      observable outcome. A happy-path test does not complete such a task.
