@@ -1,0 +1,20 @@
+{
+  "name": "openspec-plus",
+  "version": "0.2.0",
+  "description": "Production-hardening checks for OpenSpec: scenario-to-test proof and Operational Concerns lint",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "openspec-plus": "bin/openspec-plus.mjs"
+  },
+  "files": [
+    "bin",
+    "lib"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

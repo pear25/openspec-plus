@@ -1,0 +1,30 @@
+# Copy to .github/workflows/openspec.yml in a project that uses OpenSpec.
+name: openspec
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  openspec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Optional but recommended: run the tests with a JUnit reporter so only
+      # *passing* tests count as proof. Without `junit:` below, an `@spec` tag in
+      # a test file is enough. Examples:
+      #   vitest:  npx vitest run --reporter=junit --outputFile=reports/junit.xml
+      #   jest:    npx jest --reporters=default --reporters=jest-junit   (JEST_JUNIT_OUTPUT_DIR=reports)
+      #   pytest:  pytest --junitxml=reports/junit.xml
+      #   gradle:  ./gradlew test   (then junit: build/test-results/test)
+      # - run: npm ci && npx vitest run --reporter=junit --outputFile=reports/junit.xml
+
+      # Pin to a commit SHA or tag for reproducible builds.
+      - uses: pear25/openspec-plus@main
+        with:
+          junit: ""   # e.g. reports/junit.xml
+
+      - name: Spec format
+        run: openspec validate --all

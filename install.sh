@@ -15,6 +15,10 @@ openspec config set workflows '["propose","explore","apply","update","sync","arc
 
 "$here/scripts/sync.sh"
 
+# Put the `openspec-plus` checker on PATH (a symlink, so `git pull` updates it).
+npm install -g "$here" >/dev/null
+echo "openspec-plus CLI: $(command -v openspec-plus)"
+
 cat <<'EOF'
 
 Done. In each repo where you want OpenSpec, run:

@@ -1,0 +1,34 @@
+name: openspec-plus check
+description: Fail when OpenSpec scenarios lack (passing) tests or in-flight changes break the Operational Concerns rules
+inputs:
+  checks:
+    description: "`scenarios`, `concerns`, or empty for both"
+    default: ""
+  junit:
+    description: JUnit XML files or directories, one per line. When set, only passing tests count as proof.
+    default: ""
+  working-directory:
+    description: Project directory containing openspec/
+    default: "."
+  openspec-version:
+    description: "@fission-ai/openspec version to install"
+    default: latest
+runs:
+  using: composite
+  steps:
+    - name: Install OpenSpec
+      shell: bash
+      env:
+        OPENSPEC_VERSION: ${{ inputs.openspec-version }}
+      run: command -v openspec >/dev/null || npm install -g "@fission-ai/openspec@${OPENSPEC_VERSION}"
+    - name: openspec-plus check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CHECKS: ${{ inputs.checks }}
+        JUNIT: ${{ inputs.junit }}
+      run: |
+        args=(check)
+        [ -n "$CHECKS" ] && args+=("$CHECKS")
+        while IFS= read -r p; do [ -n "$p" ] && args+=(--junit "$p"); done <<< "$JUNIT"
+        node "$GITHUB_ACTION_PATH/bin/openspec-plus.mjs" "${args[@]}"

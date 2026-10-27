@@ -13,9 +13,10 @@ artifacts:
       get built. The proposal MUST include an `## Operational Concerns` section
       (see template) that addresses every concern below, each in one of two ways:
 
-      - **Covered** - name the requirement that handles it
-        (`Requirement: <name>`). That requirement MUST appear in this change's
-        delta specs with at least one failure-path scenario.
+      - **Covered** - name the requirement that handles it and its failure-path
+        scenario: `Covered - Requirement: <name> / Scenario: <name>` (several
+        pairs separated by `;`). Both MUST appear in this change's delta specs
+        (ADDED or MODIFIED), and the scenario's WHEN MUST be the failure.
       - **N/A** - give a reason specific to THIS change, e.g. "N/A - pure copy
         change, no new runtime dependency". A bare "N/A" or "not applicable" is
         not acceptable.
@@ -40,6 +41,10 @@ artifacts:
       If you cannot tell whether a concern applies, ask the user instead of
       marking it N/A.
 
+      `openspec-plus check concerns` enforces this format in CI: every row
+      present, N/A with a reason of at least three meaningful words, and every
+      Covered requirement/scenario present in the delta specs.
+
   specs:
     append: |
       ## Failure-path scenarios
@@ -50,6 +55,16 @@ artifacts:
       is externally observable behavior: the fallback used, the error shown,
       the retry made, the alert raised. A requirement with only happy-path
       scenarios does not cover a concern.
+
+      ## Scenario IDs
+
+      Each scenario has an ID, `<capability-path>#<scenario-slug>`, where the
+      slug is the scenario name lowercased with non-alphanumerics turned into
+      `-` (`auth/login` + "Auth service timeout" ->
+      `auth/login#auth-service-timeout`). Tests prove a scenario by carrying
+      that ID, and CI fails on scenarios no test proves. So scenario names MUST
+      be unique within a spec, and renaming a scenario means renaming its test
+      tags. List IDs with `openspec-plus ids <change>`.
 
   design:
     append: |
@@ -68,3 +83,22 @@ artifacts:
       exercises the failure path itself (simulate the dependency failing, send
       the invalid input, run the operation twice) and states how to verify the
       observable outcome. A happy-path test does not complete such a task.
+      The task line MUST contain the Covered scenario's ID, e.g.
+      `- [ ] 2.3 Simulate auth service timeout (auth/login#auth-service-timeout); verify "try again" is shown`.
+
+apply:
+  append: |
+    ## Proving scenarios
+
+    Every test that proves a spec scenario MUST carry `@spec <scenario-id>`
+    (IDs: `openspec-plus ids <change>`). Put it in the test's name, e.g.
+    `it("shows try again @spec auth/login#auth-service-timeout", ...)`, so it
+    reaches JUnit reports; if the framework cannot put it in the name, put it
+    in a comment on the test, or for pytest use
+    `record_property("spec", "<id>")`. Tag only tests that actually exercise
+    the scenario's WHEN and assert its THEN.
+
+    Once every task in tasks.md is checked, this change's scenarios are
+    enforced: `openspec-plus check` fails on any scenario without a tagged
+    (and, where CI uses JUnit, passing) test. Run it before checking off the
+    last task, and fix what it reports instead of checking the box.

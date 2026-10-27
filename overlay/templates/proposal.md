@@ -1,9 +1,10 @@
 
 ## Operational Concerns
 
-<!-- Required. Address every row. "Covered" names a requirement in this
-     change's delta specs that has a failure-path scenario. "N/A" needs a
-     reason specific to this change; a bare N/A is not accepted. -->
+<!-- Required; checked by `openspec-plus check concerns`. Address every row:
+     "Covered - Requirement: <name> / Scenario: <name>" naming a requirement
+     ADDED or MODIFIED in this change and its failure-path scenario, or
+     "N/A - <reason specific to this change>". A bare N/A is rejected. -->
 
 | Concern | Covered by / N/A reason |
 | --- | --- |
