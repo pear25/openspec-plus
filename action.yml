@@ -1,12 +1,15 @@
 name: openspec-plus check
-description: Fail when OpenSpec scenarios lack (passing) tests or in-flight changes break the Operational Concerns rules
+description: Fail when OpenSpec scenarios lack (passing) proof, changes break the Operational Concerns or MODIFIED rules, or a PR splits code from its spec change
 inputs:
   checks:
-    description: "`scenarios`, `concerns`, or empty for both"
+    description: "`scenarios`, `concerns`, `modified` or `pr`; empty runs all (pr only on pull_request events)"
     default: ""
   junit:
     description: JUnit XML files or directories, one per line. When set, only passing tests count as proof.
     default: ""
+  gates:
+    description: "Run gate commands from openspec/plus.json ('false' counts their scenarios as proven without running them)"
+    default: "true"
   working-directory:
     description: Project directory containing openspec/
     default: "."
@@ -21,14 +24,24 @@ runs:
       env:
         OPENSPEC_VERSION: ${{ inputs.openspec-version }}
       run: command -v openspec >/dev/null || npm install -g "@fission-ai/openspec@${OPENSPEC_VERSION}"
+    - name: Fetch PR base
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$BASE_SHA"
     - name: openspec-plus check
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
         CHECKS: ${{ inputs.checks }}
         JUNIT: ${{ inputs.junit }}
+        GATES: ${{ inputs.gates }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         args=(check)
         [ -n "$CHECKS" ] && args+=("$CHECKS")
         while IFS= read -r p; do [ -n "$p" ] && args+=(--junit "$p"); done <<< "$JUNIT"
+        [ "$GATES" = "false" ] && args+=(--no-gates)
+        [ -n "$BASE_SHA" ] && args+=(--base "$BASE_SHA")
         node "$GITHUB_ACTION_PATH/bin/openspec-plus.mjs" "${args[@]}"

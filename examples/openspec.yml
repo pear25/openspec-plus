@@ -3,6 +3,8 @@ name: openspec
 
 on:
   pull_request:
+    # `edited` re-runs the PR check when a `No-Spec:` line is added to the description.
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
 

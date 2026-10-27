@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Rebuild the global OpenSpec setup for Claude Code:
 #   1. the user-level spec-driven schema (package schema + overlay/)
-#   2. the OpenSpec skills and /opsx commands in ~/.claude
+#   2. the OpenSpec skills and /opsx commands in ~/.claude, plus the
+#      openspec-verifier subagent and the pre-archive gate (install-claude.mjs)
 # `openspec init` only writes per-project files, so step 2 generates them in a
 # throwaway project and copies them out. Workflows come from the global
 # profile (`openspec config list`). Re-run after `brew upgrade openspec`, after
@@ -24,6 +25,9 @@ mkdir -p "$CLAUDE_DIR/skills" "$CLAUDE_DIR/commands"
 rm -rf "$CLAUDE_DIR"/skills/openspec-* "$CLAUDE_DIR/commands/opsx"
 cp -R "$tmp"/.claude/skills/openspec-* "$CLAUDE_DIR/skills/"
 cp -R "$tmp/.claude/commands/opsx" "$CLAUDE_DIR/commands/"
+
+# Fresh-context verifier subagent, /opsx:verify delegation, archive/sync gate.
+node "$here/install-claude.mjs" "$CLAUDE_DIR"
 
 echo "OpenSpec $(openspec --version) installed into $CLAUDE_DIR:"
 ls -d "$CLAUDE_DIR"/skills/openspec-* | sed 's|.*/|  skill   |'

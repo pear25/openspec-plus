@@ -1,0 +1,102 @@
+name: openspec-plus drift audit
+description: Claude compares OpenSpec specs with the code, read-only, and keeps one `spec-drift` issue up to date
+inputs:
+  anthropic_api_key:
+    description: Anthropic API key (or set claude_code_oauth_token)
+    default: ""
+  claude_code_oauth_token:
+    description: Claude Code OAuth token, alternative to anthropic_api_key
+    default: ""
+  github-token:
+    description: Token used to open/update/close the drift issue (needs issues:write)
+    default: ${{ github.token }}
+  since:
+    description: git log window for "code changed without a spec change" triage
+    default: 8 days ago
+  specs:
+    description: Space-separated spec IDs or prefixes to audit (default all)
+    default: ""
+  max-turns:
+    description: Turn budget for the audit
+    default: "80"
+  model:
+    description: "Claude model (default is the action's default)"
+    default: ""
+  label:
+    description: Issue label used to find the drift issue
+    default: spec-drift
+  working-directory:
+    description: Project directory containing openspec/
+    default: "."
+  openspec-version:
+    description: "@fission-ai/openspec version to install"
+    default: latest
+runs:
+  using: composite
+  steps:
+    - name: Install OpenSpec and openspec-plus
+      shell: bash
+      env:
+        OPENSPEC_VERSION: ${{ inputs.openspec-version }}
+      run: |
+        command -v openspec >/dev/null || npm install -g "@fission-ai/openspec@${OPENSPEC_VERSION}"
+        npm install -g "$GITHUB_ACTION_PATH/.." >/dev/null
+
+    - name: Build prompt
+      id: prompt
+      shell: bash
+      env:
+        SINCE: ${{ inputs.since }}
+        SPECS: ${{ inputs.specs }}
+        WD: ${{ inputs.working-directory }}
+        MODEL: ${{ inputs.model }}
+        MAX_TURNS: ${{ inputs.max-turns }}
+      run: |
+        report="$RUNNER_TEMP/openspec-drift-report.md"
+        rm -f "$report"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        shopt -u patsub_replacement 2>/dev/null || true   # bash 5.2: '&' in replacements is literal
+        prompt="$(cat "$GITHUB_ACTION_PATH/prompt.md")"
+        prompt="${prompt//__REPORT__/$report}"
+        prompt="${prompt//__SINCE__/$SINCE}"
+        prompt="${prompt//__SPECS__/$SPECS}"
+        if [ "$WD" != "." ]; then prompt="Work in the directory \`$WD\` (it contains openspec/). $prompt"; fi
+        delim="EOF_$(openssl rand -hex 8)"
+        { echo "text<<$delim"; echo "$prompt"; echo "$delim"; } >> "$GITHUB_OUTPUT"
+        [[ "$MAX_TURNS" =~ ^[0-9]+$ ]] || { echo "::error::max-turns must be a number"; exit 1; }
+        [[ -z "$MODEL" || "$MODEL" =~ ^[A-Za-z0-9._:-]+$ ]] || { echo "::error::invalid model"; exit 1; }
+        tools='Read,Grep,Glob,Write,Bash(openspec:*),Bash(openspec-plus:*),Bash(git log:*),Bash(git show:*),Bash(git diff:*),Bash(git grep:*)'
+        echo "args=${MODEL:+--model $MODEL }--max-turns $MAX_TURNS --allowedTools \"$tools\"" >> "$GITHUB_OUTPUT"
+
+    - name: Audit
+      uses: anthropics/claude-code-action@v1
+      with:
+        prompt: ${{ steps.prompt.outputs.text }}
+        claude_args: ${{ steps.prompt.outputs.args }}
+        anthropic_api_key: ${{ inputs.anthropic_api_key }}
+        claude_code_oauth_token: ${{ inputs.claude_code_oauth_token }}
+        github_token: ${{ inputs.github-token }}
+
+    - name: Update drift issue
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPORT: ${{ steps.prompt.outputs.report }}
+        LABEL: ${{ inputs.label }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        if [ ! -s "$REPORT" ]; then echo "::error::the audit wrote no report"; exit 1; fi
+        count="$(head -1 "$REPORT" | sed -n 's/^DRIFT: *\([0-9][0-9]*\)$/\1/p')"
+        if [ -z "$count" ]; then echo "::error::report does not start with 'DRIFT: <n>'"; exit 1; fi
+        body="$(tail -n +2 "$REPORT")"$'\n\n'"_Updated by [openspec-plus drift audit]($RUN_URL) on $(date -u +%F)._"
+        issue="$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')"
+        if [ "$count" -gt 0 ]; then
+          gh label create "$LABEL" --color D93F0B --description "OpenSpec specs and code disagree" --force >/dev/null
+          title="Spec drift: $count finding(s)"
+          if [ -n "$issue" ]; then gh issue edit "$issue" --title "$title" --body "$body"
+          else gh issue create --title "$title" --label "$LABEL" --body "$body"; fi
+        elif [ -n "$issue" ]; then
+          gh issue comment "$issue" --body "No drift found. $RUN_URL"
+          gh issue close "$issue"
+        fi
+        { echo "## Spec drift: $count"; echo; echo "$body"; } >> "$GITHUB_STEP_SUMMARY"
