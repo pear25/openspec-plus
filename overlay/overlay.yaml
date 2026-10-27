@@ -66,6 +66,18 @@ artifacts:
       be unique within a spec, and renaming a scenario means renaming its test
       tags. List IDs with `openspec-plus ids <change>`.
 
+      ## Dropping a scenario
+
+      Archive replaces a MODIFIED requirement wholesale, so any scenario left
+      out of the block is deleted, and `openspec-plus check` fails on it. To
+      drop one on purpose, list it in proposal.md:
+
+      ```
+      ## Dropped Scenarios
+
+      - auth/login#legacy-sso - SSO moves to the identity service in this change
+      ```
+
   design:
     append: |
       ## Consistency with Operational Concerns

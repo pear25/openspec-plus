@@ -15,5 +15,5 @@ jobs:
           node-version: 22
       - run: npm install -g @fission-ai/openspec@latest
       - run: npm test
-      - name: Overlay still applies to the latest OpenSpec schema
-        run: XDG_DATA_HOME="$RUNNER_TEMP" node scripts/build-schema.mjs
+      - name: Overlay and Claude additions still apply to the latest OpenSpec
+        run: XDG_DATA_HOME="$RUNNER_TEMP/xdg" CLAUDE_DIR="$RUNNER_TEMP/claude" scripts/sync.sh

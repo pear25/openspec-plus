@@ -257,3 +257,130 @@ describe("check concerns", { skip: !hasOpenspec && "openspec CLI not installed" 
     assert.equal(cli(dir, "check", "concerns").code, 0);
   });
 });
+
+describe("check modified", { skip: !hasOpenspec && "openspec CLI not installed" }, () => {
+  const withDelta = (delta, proposal = PROPOSAL()) =>
+    project({
+      "openspec/changes/add-lockout/proposal.md": proposal,
+      "openspec/changes/add-lockout/specs/auth/login/spec.md": delta,
+    });
+
+  test("a MODIFIED block that drops a scenario fails until the drop is declared", () => {
+    let r = cli(withDelta(DELTA), "check", "modified");
+    assert.equal(r.code, 1);
+    assert.match(r.out, /add-lockout\/specs\/auth\/login\/spec\.md:\d+ .*drops scenario auth\/login#auth-service-timeout/);
+
+    const declared = `${PROPOSAL()}\n## Dropped Scenarios\n\n- \`auth/login#auth-service-timeout\` - lockout check now fails fast before the auth call\n`;
+    r = cli(withDelta(DELTA, declared), "check", "modified");
+    assert.equal(r.code, 0, r.out);
+
+    r = cli(withDelta(DELTA, `${PROPOSAL()}\n## Dropped Scenarios\n\n- auth/login#auth-service-timeout\n`), "check", "modified");
+    assert.match(r.out, /dropped scenario auth\/login#auth-service-timeout needs a reason/);
+  });
+
+  test("unknown MODIFIED target fails; RENAMED + MODIFIED keeping scenarios passes", () => {
+    const unknown = DELTA.replace("### Requirement: Password login", "### Requirement: Pasword login");
+    assert.match(cli(withDelta(unknown), "check", "modified").out, /"Pasword login" does not exist in openspec\/specs\/auth\/login\/spec\.md/);
+
+    const renamed = `## RENAMED Requirements
+
+- FROM: \`### Requirement: Password login\`
+- TO: \`### Requirement: Credential login\`
+
+## MODIFIED Requirements
+
+${SPEC.slice(SPEC.indexOf("### Requirement: Password login")).replace("Password login", "Credential login")}`;
+    const r = cli(withDelta(renamed), "check", "modified");
+    assert.equal(r.code, 0, r.out);
+  });
+});
+
+describe("check pr", { skip: !hasOpenspec && "openspec CLI not installed" }, () => {
+  const g = (dir, ...args) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: dir, stdio: "pipe" });
+  const write = (dir, files) => {
+    for (const [path, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), content);
+    }
+  };
+  const repo = () => {
+    const dir = project({ "src/login.js": "export {}\n", "openspec/changes/add-lockout/proposal.md": PROPOSAL() });
+    g(dir, "add", "-A");
+    g(dir, "commit", "-qm", "base");
+    g(dir, "branch", "base");
+    return dir;
+  };
+  const pr = (dir, files, body) => {
+    write(dir, files);
+    g(dir, "add", "-A");
+    g(dir, "commit", "-qm", "pr");
+    const args = ["check", "pr", "--base", "base"];
+    if (body !== undefined) {
+      writeFileSync(join(dir, "..", `${dir.split("/").pop()}.body`), body);
+      args.push("--pr-body-file", join(dir, "..", `${dir.split("/").pop()}.body`));
+    }
+    return cli(dir, ...args);
+  };
+
+  test("code without any OpenSpec work needs a No-Spec reason", () => {
+    let dir = repo();
+    let r = pr(dir, { "src/login.js": "export const x = 1\n" }, "");
+    assert.equal(r.code, 1);
+    assert.match(r.out, /no OpenSpec change or spec update/);
+
+    dir = repo();
+    assert.match(pr(dir, { "src/login.js": "1\n" }, "No-Spec: fix").out, /No-Spec needs a reason/);
+
+    dir = repo();
+    r = pr(dir, { "src/login.js": "1\n" }, "Bump deps.\n\nNo-Spec: dependency bump for CVE-2026-1234, no behavior change\n");
+    assert.equal(r.code, 0, r.out);
+  });
+
+  test("code plus an unarchived change fails; archiving it in the PR passes", () => {
+    let dir = repo();
+    let r = pr(dir, { "src/login.js": "1\n", "openspec/changes/add-lockout/tasks.md": "- [x] 1.1 done\n" }, "");
+    assert.equal(r.code, 1);
+    assert.match(r.out, /Change add-lockout is edited in this PR alongside code but not archived/);
+
+    dir = repo();
+    mkdirSync(join(dir, "openspec/changes/archive"), { recursive: true });
+    g(dir, "mv", "openspec/changes/add-lockout","openspec/changes/archive/2026-10-27-add-lockout");
+    r = pr(dir, { "src/login.js": "1\n", "openspec/specs/auth/login/spec.md": SPEC }, "");
+    assert.equal(r.code, 0, r.out);
+  });
+
+  test("proposal-only and docs-only PRs pass", () => {
+    const dir = repo();
+    const r = pr(dir, { "openspec/changes/add-lockout/design.md": "# Design\n", "README.md": "docs\n" }, "");
+    assert.equal(r.code, 0, r.out);
+  });
+});
+
+describe("gates", { skip: !hasOpenspec && "openspec CLI not installed" }, () => {
+  const withGates = (gates) =>
+    project({
+      "test/login.test.js": `it("ok @spec auth/login#valid-credentials", () => {});\n`,
+      "openspec/plus.json": JSON.stringify({ gates }),
+    });
+
+  test("a passing gate proves its scenarios; a failing one fails them", () => {
+    let r = cli(withGates([{ name: "timeout budget", run: "true", proves: ["auth/login#auth-service-timeout"] }]), "check", "scenarios");
+    assert.equal(r.code, 0, r.out);
+
+    r = cli(withGates([{ name: "timeout budget", run: "echo p95=2400ms; exit 3", proves: ["auth/login#auth-service-timeout"] }]), "check", "scenarios");
+    assert.equal(r.code, 1);
+    assert.match(r.out, /Gate "timeout budget" failed .*\n\s*p95=2400ms/);
+    assert.match(r.out, /auth-service-timeout has failing tests: gate "timeout budget"/);
+
+    r = cli(withGates([{ name: "timeout budget", run: "exit 3", proves: ["auth/login#auth-service-timeout"] }]), "check", "scenarios", "--no-gates");
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /--no-gates: 1 scenario/);
+  });
+
+  test("gates must be well-formed and prove known scenarios", () => {
+    const r = cli(withGates([{ name: "bad", run: "true" }, { name: "typo", run: "true", proves: ["auth/login#auth-timeout"] }]), "check", "scenarios");
+    assert.equal(r.code, 1);
+    assert.match(r.out, /gate "bad" needs "run"/);
+    assert.match(r.out, /gate "typo" proves unknown scenario auth\/login#auth-timeout/);
+  });
+});
