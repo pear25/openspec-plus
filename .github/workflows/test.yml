@@ -16,4 +16,8 @@ jobs:
       - run: npm install -g @fission-ai/openspec@latest
       - run: npm test
       - name: Overlay and Claude additions still apply to the latest OpenSpec
-        run: XDG_DATA_HOME="$RUNNER_TEMP/xdg" CLAUDE_DIR="$RUNNER_TEMP/claude" scripts/sync.sh
+        run: |
+          # Same profile install.sh sets.
+          openspec config set profile custom
+          openspec config set workflows '["propose","explore","apply","update","sync","archive","verify"]'
+          XDG_DATA_HOME="$RUNNER_TEMP/xdg" CLAUDE_DIR="$RUNNER_TEMP/claude" scripts/sync.sh

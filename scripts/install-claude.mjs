@@ -31,6 +31,15 @@ const splitFrontmatter = (text) => {
 
 const verifySkill = join(claudeDir, "skills/openspec-verify-change/SKILL.md");
 const verifyCommand = join(claudeDir, "commands/opsx/verify.md");
+const WORKFLOWS = '\'["propose","explore","apply","update","sync","archive","verify"]\'';
+for (const [file, workflow] of [[verifySkill, "verify"], [join(claudeDir, "commands/opsx/archive.md"), "archive"], [join(claudeDir, "commands/opsx/sync.md"), "sync"]]) {
+  if (!existsSync(file)) {
+    throw new Error(
+      `the "${workflow}" workflow was not generated; enable it in the global OpenSpec profile (install.sh does this):\n` +
+        `  openspec config set profile custom && openspec config set workflows ${WORKFLOWS}`,
+    );
+  }
+}
 const [, upstreamProcedure] = splitFrontmatter(read(verifySkill));
 
 const agent = `---
